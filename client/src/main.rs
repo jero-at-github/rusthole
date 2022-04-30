@@ -1,7 +1,7 @@
 use clap::{Parser, Subcommand};
 use std::error::Error;
 use tokio::{
-    fs,
+    fs::{self, File},
     io::{AsyncReadExt, AsyncWriteExt, BufReader},
     net::{TcpListener, TcpStream},
 };
@@ -19,7 +19,7 @@ enum Commands {
     /// Send a file
     Send { path: String },
     /// Receives a file
-    Receive { path: String },
+    Receive,
 }
 
 #[tokio::main]
@@ -28,14 +28,16 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     match &args.command {
         Commands::Send { path } => exec_server(path.clone()).await,
-        Commands::Receive { path } => exec_client().await,
+        Commands::Receive => exec_client().await,
     }
 }
 
 async fn exec_client() -> Result<(), Box<dyn Error>> {
-    let host = "localhost";
+    let host = "88.152.112.218";
     let port = 8080;
-    let recv_path_file = "samples/client/received.txt";
+    let path = "../../samples/client/received.mp4";
+
+    File::create(path).await?;
 
     // Connecting to listener
     let stream = TcpStream::connect(format!("{}:{}", host, port)).await?;
@@ -46,23 +48,21 @@ async fn exec_client() -> Result<(), Box<dyn Error>> {
     reader.read_to_end(&mut reader_content).await.unwrap();
 
     // Write content file
-    fs::write(recv_path_file, reader_content).await?;
+    fs::write(path, reader_content).await?;
 
     Ok(())
 }
 
 async fn exec_server(path: String) -> Result<(), Box<dyn std::error::Error + 'static>> {
-    let host = "localhost";
+    // let ip = public_ip::addr().await.unwrap();
+    let ip = "127.0.0.1";
     let port = 8080;
-    let sent_file_path = "samples/server/video_sample.mp4";
 
     // Start listener
-    let listener = TcpListener::bind(format!("{}:{}", host, port))
-        .await
-        .unwrap();
+    let listener = TcpListener::bind(format!("{}:{}", ip, port)).await.unwrap();
 
     // Wait for connection
-    println!("Accepting connection at {}:{}", host, port);
+    println!("Accepting connection at {}:{}", ip, port);
     let (mut socket, _addr) = listener.accept().await.unwrap();
 
     // Send file content
