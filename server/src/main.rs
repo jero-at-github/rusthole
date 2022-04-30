@@ -1,25 +1,24 @@
-use std::{io::Read, net::SocketAddr};
-
-use tokio::{
-    fs,
-    io::{AsyncReadExt, AsyncWriteExt},
-    net::TcpListener,
-    sync::broadcast,
-};
+use tokio::{fs, io::AsyncWriteExt, net::TcpListener};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + 'static>> {
-    let listener = TcpListener::bind("localhost:8080").await.unwrap();
-    let (mut socket, addr) = listener.accept().await.unwrap();
+    let host = "localhost";
+    let port = 8080;
+    let sent_file_path = "samples/server/video_sample.mp4";
 
-    let (socket_reader, mut socket_writer) = socket.split();
+    // Start listener
+    let listener = TcpListener::bind(format!("{}:{}", host, port))
+        .await
+        .unwrap();
 
-    let contents = fs::read("samples/server/data.txt").await?;
+    // Wait for connection
+    println!("Accepting connection at {}:{}", host, port);
+    let (mut socket, _addr) = listener.accept().await.unwrap();
 
-    // let mut buffer = BytesMut::with_capacity(10);
-
+    // Send file content
+    let (_socket_reader, mut socket_writer) = socket.split();
+    let contents = fs::read(sent_file_path).await?;
     socket_writer.write_all(contents.as_slice()).await.unwrap();
-    //let (tx, _rx) = broadcast::channel::<(String, SocketAddr)>(1);
 
     Ok(())
 }
