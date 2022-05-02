@@ -60,29 +60,44 @@ async fn exec_receiver() -> Result<(), Box<dyn Error>> {
 }
 
 async fn exec_sender(path: String) -> Result<(), Box<dyn Error>> {
-    let ip = "127.0.0.1";
-    let port = 8080;
+    let local_ip = "127.0.0.1";
+    let local_port = 8080;
 
     // Start listener
-    let listener = TcpListener::bind(format!("{}:{}", ip, port)).await.unwrap();
+    let listener = TcpListener::bind(format!("{}:{}", local_ip, local_port))
+        .await
+        .unwrap();
 
     // Generate and print the secret phrase
     let secret_phrase = get_phrase().unwrap();
-    print_secret_phrase(secret_phrase);
+    print_secret_phrase(&secret_phrase);
+
+    // Send secret phras to sync server
+    connect_to_sync_server(&secret_phrase).await?;
 
     // Wait for connection
-    println!("Accepting connection at {}:{}", ip, port);
-    let (mut socket, _addr) = listener.accept().await.unwrap();
+    println!("Accepting connection at {}:{}", local_ip, local_port);
+    let (mut stream, _addr) = listener.accept().await.unwrap();
 
     // Send file content
-    let (_socket_reader, mut socket_writer) = socket.split();
+    //let (_socket_reader, mut socket_writer) = socket.split();
     let contents = fs::read(path).await?;
-    socket_writer.write_all(contents.as_slice()).await.unwrap();
+    stream.write_all(contents.as_slice()).await.unwrap();
 
     Ok(())
 }
 
-fn print_secret_phrase(secret_phrase: String) {
+async fn connect_to_sync_server(secret_phrase: &String) -> Result<(), Box<dyn Error>> {
+    let sync_server_ip = "127.0.0.1";
+    let sync_server_port = 8081;
+
+    let mut stream = TcpStream::connect(format!("{}:{}", sync_server_ip, sync_server_port)).await?;
+    stream.write(secret_phrase.as_bytes()).await.unwrap();
+
+    Ok(())
+}
+
+fn print_secret_phrase(secret_phrase: &String) {
     println!("Rusthole code is: {}", secret_phrase);
     println!("On the other computer, please run:");
     println!("");
