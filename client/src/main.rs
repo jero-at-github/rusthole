@@ -1,5 +1,6 @@
 use clap::{Parser, Subcommand};
 use rand::Rng;
+use serde_json::json;
 use std::error::Error;
 use std::fs::File as StdFile;
 use std::io::BufReader as StdBufReader;
@@ -24,7 +25,7 @@ enum Commands {
     /// Send a file in test mode
     TestSend,
     /// Receives a file
-    Receive,
+    Receive { secret_phrase: String },
 }
 
 #[tokio::main]
@@ -34,11 +35,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
     match &args.command {
         Commands::Send { path } => exec_sender(path.clone()).await,
         Commands::TestSend => exec_sender("./samples/client/received.mp4".into()).await,
-        Commands::Receive => exec_receiver().await,
+        Commands::Receive { secret_phrase } => exec_receiver(secret_phrase).await,
     }
 }
 
-async fn exec_receiver() -> Result<(), Box<dyn Error>> {
+async fn exec_receiver(secret_phrase: &String) -> Result<(), Box<dyn Error>> {
     let host = "88.152.112.218";
     let port = 8080;
     let path = "../../samples/client/received.mp4";
@@ -92,7 +93,13 @@ async fn connect_to_sync_server(secret_phrase: &String) -> Result<(), Box<dyn Er
     let sync_server_port = 8081;
 
     let mut stream = TcpStream::connect(format!("{}:{}", sync_server_ip, sync_server_port)).await?;
-    stream.write(secret_phrase.as_bytes()).await.unwrap();
+
+    let data = json!({
+        "requester":  "sender",
+        "secret_phrase": secret_phrase,
+    });
+
+    stream.write(data.to_string().as_bytes()).await.unwrap();
 
     Ok(())
 }

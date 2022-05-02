@@ -1,7 +1,7 @@
+use serde_json::Value;
 use std::{collections::HashMap, net::IpAddr};
-
 use tokio::{
-    io::{AsyncBufReadExt, BufReader},
+    io::{AsyncBufReadExt, AsyncReadExt, BufReader},
     net::TcpListener,
 };
 
@@ -25,19 +25,30 @@ async fn main() -> Result<(), Box<dyn std::error::Error + 'static>> {
         let mut reader_content = String::new();
 
         // Read secret phrase
-        let _num_bytes = reader.read_line(&mut reader_content).await.unwrap();
-
-        // Check if the secret phrase is well-formed
+        let num_bytes = reader.read_line(&mut reader_content).await.unwrap();
 
         // Store the secret phrase and corresponding IP  in memory
-        // if num_bytes == 0 {
-        //     return Err(Box("No"));
-        // }
-        phrases.insert(reader_content, addr.ip());
+        if num_bytes != 0 {
+            let data: Value = serde_json::from_str(reader_content.as_str())?;
+            let requester = data["requester"].to_string();
+            let secret_phrase = data["secret_phrase"].to_string();
 
-        println!(
-            "Received connection request for secret phrase: {:?}",
-            phrases
-        );
+            if requester == "sender" {
+                phrases.insert(secret_phrase, addr.ip());
+
+                println!(
+                    "Received connection request for secret phrase: {:?}",
+                    reader_content
+                );
+
+                for (key, value) in &phrases {
+                    println!("{}: {}", key, value);
+                }
+            } else {
+                if phrases.contains_key(&secret_phrase) {
+                    // send sender IP back
+                }
+            }
+        }
     }
 }
