@@ -19,5 +19,5 @@ Following crates have been used in the project:
 
 # Deployment usage
 1) Executes the server: `server.exe`
-2) Executes the client in sender mode: `client.exe send ./my_folder/file_to_send.extension`
-3) Executes the client in receiver mode: `client.exe receive [secret_phrase]`
+2) Executes the client in sender mode: `rusthole.exe send ./my_folder/file_to_send.extension`
+3) Executes the client in receiver mode: `rusthole.exe receive [secret_phrase]`

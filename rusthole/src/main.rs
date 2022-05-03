@@ -1,14 +1,21 @@
 use clap::{Parser, Subcommand};
 use rand::Rng;
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::error::Error;
 use std::fs::File as StdFile;
 use std::io::BufReader as StdBufReader;
 use tokio::{
     fs::{self, File},
-    io::{AsyncReadExt, AsyncWriteExt, BufReader},
+    io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader},
     net::{TcpListener, TcpStream},
 };
+
+#[derive(Serialize, Deserialize)]
+struct ReceiverData {
+    ip: String,
+    port: String,
+}
 
 /// Send files from computer to computer
 #[derive(Parser)]
@@ -34,20 +41,28 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     match &args.command {
         Commands::Send { path } => exec_sender(path.clone()).await,
-        Commands::TestSend => exec_sender("./samples/client/received.mp4".into()).await,
+        Commands::TestSend => exec_sender("./samples/received.mp4".into()).await,
         Commands::Receive { secret_phrase } => exec_receiver(secret_phrase).await,
     }
 }
 
-async fn exec_receiver(secret_phrase: &String) -> Result<(), Box<dyn Error>> {
-    let host = "88.152.112.218";
-    let port = 8080;
-    let path = "../../samples/client/received.mp4";
+const SYNC_SERVER_IP: &str = "127.0.0.1";
+const SYNC_SERVER_PORT: &str = "8081";
+const SENDER_PORT: &str = "8080";
+
+async fn exec_receiver(secret_phrase: &str) -> Result<(), Box<dyn Error>> {
+    let path = "./downloads/received.mp4";
 
     File::create(path).await?;
 
+    print!("{esc}c", esc = 27 as char);
+
+    let (ip, port) = connect_to_sync_server("receiver".into(), secret_phrase).await?;
+
+    print!("ip: {} port: {}", ip, port);
+
     // Connecting to listener
-    let stream = TcpStream::connect(format!("{}:{}", host, port)).await?;
+    let stream = TcpStream::connect(format!("{}:{}", ip, SENDER_PORT)).await?;
 
     // Read streamed content file
     let mut reader = BufReader::new(stream);
@@ -62,52 +77,68 @@ async fn exec_receiver(secret_phrase: &String) -> Result<(), Box<dyn Error>> {
 
 async fn exec_sender(path: String) -> Result<(), Box<dyn Error>> {
     let local_ip = "127.0.0.1";
-    let local_port = 8080;
+
+    print!("{esc}c", esc = 27 as char);
+
+    // Generate the secret phrase
+    let secret_phrase = get_phrase().unwrap();
+
+    // Send secret phras to sync server
+    connect_to_sync_server("sender".into(), &secret_phrase).await?;
 
     // Start listener
-    let listener = TcpListener::bind(format!("{}:{}", local_ip, local_port))
+    let listener = TcpListener::bind(format!("{}:{}", local_ip, SENDER_PORT))
         .await
         .unwrap();
 
-    // Generate and print the secret phrase
-    let secret_phrase = get_phrase().unwrap();
+    // Print the secret phrase
     print_secret_phrase(&secret_phrase);
 
-    // Send secret phras to sync server
-    connect_to_sync_server(&secret_phrase).await?;
-
     // Wait for connection
-    println!("Accepting connection at {}:{}", local_ip, local_port);
     let (mut stream, _addr) = listener.accept().await.unwrap();
 
     // Send file content
-    //let (_socket_reader, mut socket_writer) = socket.split();
     let contents = fs::read(path).await?;
     stream.write_all(contents.as_slice()).await.unwrap();
 
     Ok(())
 }
 
-async fn connect_to_sync_server(secret_phrase: &String) -> Result<(), Box<dyn Error>> {
-    let sync_server_ip = "127.0.0.1";
-    let sync_server_port = 8081;
+async fn connect_to_sync_server(
+    requester: String,
+    secret_phrase: &str,
+) -> Result<(String, String), Box<dyn Error>> {
+    let mut ip = String::new();
+    let mut port = String::new();
 
-    let mut stream = TcpStream::connect(format!("{}:{}", sync_server_ip, sync_server_port)).await?;
+    let mut stream = TcpStream::connect(format!("{}:{}", SYNC_SERVER_IP, SYNC_SERVER_PORT)).await?;
 
     let data = json!({
-        "requester":  "sender",
+        "requester":  requester,
         "secret_phrase": secret_phrase,
     });
 
     stream.write(data.to_string().as_bytes()).await.unwrap();
 
-    Ok(())
+    if requester == "receiver" {
+        let mut reader = BufReader::new(stream);
+        let mut reader_content = String::new();
+
+        let num_bytes = reader.read_line(&mut reader_content).await.unwrap();
+        if num_bytes > 0 {
+            let data: ReceiverData = serde_json::from_str(reader_content.as_str())?;
+            ip = data.ip;
+            port = data.port;
+        }
+    }
+
+    Ok((ip, port))
 }
 
-fn print_secret_phrase(secret_phrase: &String) {
+fn print_secret_phrase(secret_phrase: &str) {
     println!("Rusthole code is: {}", secret_phrase);
     println!("On the other computer, please run:");
-    println!("");
+    println!();
     println!("rusthole receive {}", secret_phrase);
 }
 
@@ -121,7 +152,7 @@ fn get_phrase() -> Result<String, Box<dyn Error>> {
 
     let phrase = format!(
         "{}-{}-{}",
-        rng.gen_range(0..=9 as u8),
+        rng.gen_range(0..=9u8),
         bip39_list["list"][rng.gen_range(0..=2047)]
             .as_str()
             .unwrap(),
