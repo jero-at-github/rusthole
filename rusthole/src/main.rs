@@ -1,9 +1,9 @@
 use clap::{Parser, Subcommand};
 use rand::Rng;
 use serde::{Deserialize, Serialize};
-use std::error::Error;
-use std::fs::File as StdFile;
+use std::fs::{metadata, File as StdFile};
 use std::io::BufReader as StdBufReader;
+use std::{error::Error, path::Path};
 use tokio::{
     fs::{self, File},
     io::{AsyncReadExt, AsyncWriteExt, BufReader},
@@ -89,6 +89,14 @@ async fn exec_receiver(secret_phrase: &str) -> Result<(), Box<dyn Error>> {
 async fn exec_sender(path: String) -> Result<(), Box<dyn Error>> {
     let local_ip = "127.0.0.1";
 
+    // Check if the path exists
+    let path_file = Path::new(path.as_str());
+    let path_exists = path_file.exists();
+    if !path_exists {
+        return Err("Path doesn't exist!")?;
+    }
+
+    // Clean terminal
     print!("{esc}c", esc = 27 as char);
 
     // Generate the secret phrase
@@ -102,7 +110,12 @@ async fn exec_sender(path: String) -> Result<(), Box<dyn Error>> {
         .await
         .unwrap();
 
-    // Print the secret phrase
+    // Print file size, file name and secret phrase
+    println!(
+        "Sending {:?} Bytes file named {:?}",
+        metadata(path_file)?.len(),
+        path_file.file_name().unwrap()
+    );
     print_secret_phrase(&secret_phrase);
 
     // Wait for connection

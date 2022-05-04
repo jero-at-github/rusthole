@@ -28,8 +28,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + 'static>> {
     // Start listener
     let listener = TcpListener::bind(format!("{}:{}", ip, port)).await.unwrap();
 
-    // Wait for connection
+    // Clean terminal
     print!("{esc}c", esc = 27 as char);
+    // Wait for connection
     println!("Sync server accepting connection at {}:{}", ip, port);
 
     loop {
