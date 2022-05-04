@@ -7,7 +7,7 @@ The intention is to create a similar but very basic application implemented in R
 
 # Structure
 The project compiles into: 
-- A client binary, used to send and received files between 2 computers in a direct connection (P2P).
+- A client binary, used to send and receive files between 2 computers in a direct connection (P2P).
 - A synchronization server, which mission is to match a sender and a receiver through a secret phrase.
 
 # Crates
@@ -17,7 +17,8 @@ Following crates have been used in the project:
 - serde_json
 - rand
 
-# Deployment usage
-1) Executes the server: `server.exe`
-2) Executes the client in sender mode: `rusthole.exe send ./my_folder/file_to_send.extension`
-3) Executes the client in receiver mode: `rusthole.exe receive [secret_phrase]`
+# Usage
+1) Compile the binaries as usual: `cargo build`
+2) Executes the server: `server.exe`
+3) Executes the client in sender mode: `rusthole.exe send ./my_folder/file_to_send.extension`
+4) Executes the client in receiver mode: `rusthole.exe receive [secret_phrase]`
