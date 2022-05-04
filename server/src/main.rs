@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::{collections::HashMap, net::SocketAddr};
 use tokio::{
-    io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
+    io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader},
     net::TcpListener,
 };
 
@@ -31,14 +31,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error + 'static>> {
         let (stream_reader, mut stream_writer) = stream.split();
 
         let mut reader = BufReader::new(stream_reader);
-        let mut reader_content = String::new();
+        let mut buffer = vec![0; 1024];
 
         // Read secret phrase
-        let num_bytes = reader.read_line(&mut reader_content).await.unwrap();
+        let num_bytes = reader.read(&mut buffer[..]).await.unwrap();
 
         // Store the secret phrase and corresponding IP in memory
-        if num_bytes != 0 {
-            let data: ReceiverData = serde_json::from_str(reader_content.as_str())?;
+        if num_bytes > 0 {
+            let data: ReceiverData = serde_json::from_slice(&buffer[..num_bytes])?;
             let requester = data.requester;
             let secret_phrase = data.secret_phrase;
 
@@ -56,7 +56,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + 'static>> {
 
                     let data = json!({
                         "ip": sender_addr.ip(),
-                        "host": sender_addr.port(),
+                        "port": sender_addr.port(),
                     });
 
                     stream_writer

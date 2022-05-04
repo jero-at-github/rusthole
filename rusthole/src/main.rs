@@ -14,7 +14,7 @@ use tokio::{
 #[derive(Serialize, Deserialize)]
 struct ReceiverData {
     ip: String,
-    port: String,
+    port: u16,
 }
 
 /// Send files from computer to computer
@@ -118,17 +118,18 @@ async fn connect_to_sync_server(
         "secret_phrase": secret_phrase,
     });
 
-    stream.write(data.to_string().as_bytes()).await.unwrap();
+    stream.write_all(data.to_string().as_bytes()).await.unwrap();
 
     if requester == "receiver" {
         let mut reader = BufReader::new(stream);
-        let mut reader_content = String::new();
+        let mut buffer = vec![0; 1024];
 
-        let num_bytes = reader.read_line(&mut reader_content).await.unwrap();
+        let num_bytes = reader.read(&mut buffer[..]).await.unwrap();
+
         if num_bytes > 0 {
-            let data: ReceiverData = serde_json::from_str(reader_content.as_str())?;
+            let data: ReceiverData = serde_json::from_slice(&buffer[..num_bytes])?;
             ip = data.ip;
-            port = data.port;
+            port = data.port.to_string();
         }
     }
 
@@ -161,5 +162,6 @@ fn get_phrase() -> Result<String, Box<dyn Error>> {
             .unwrap()
     );
 
-    Ok(phrase)
+    Ok("0-lula-sol".to_string())
+    //Ok(phrase)
 }
