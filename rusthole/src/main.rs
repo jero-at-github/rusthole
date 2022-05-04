@@ -1,7 +1,6 @@
 use clap::{Parser, Subcommand};
 use rand::Rng;
 use serde::{Deserialize, Serialize};
-use serde_json::json;
 use std::error::Error;
 use std::fs::File as StdFile;
 use std::io::BufReader as StdBufReader;
@@ -11,8 +10,20 @@ use tokio::{
     net::{TcpListener, TcpStream},
 };
 
+#[derive(Serialize, Deserialize, Copy, Clone)]
+enum Requester {
+    Sender,
+    Receiver,
+}
+
 #[derive(Serialize, Deserialize)]
-struct ReceiverData {
+struct ReceiverSendData {
+    requester: Requester,
+    secret_phrase: String,
+}
+
+#[derive(Serialize, Deserialize)]
+struct ReceiverGetData {
     ip: String,
     port: u16,
 }
@@ -57,7 +68,7 @@ async fn exec_receiver(secret_phrase: &str) -> Result<(), Box<dyn Error>> {
 
     print!("{esc}c", esc = 27 as char);
 
-    let (ip, port) = connect_to_sync_server("receiver".into(), secret_phrase).await?;
+    let (ip, port) = connect_to_sync_server(Requester::Receiver, secret_phrase).await?;
 
     print!("ip: {} port: {}", ip, port);
 
@@ -84,7 +95,7 @@ async fn exec_sender(path: String) -> Result<(), Box<dyn Error>> {
     let secret_phrase = get_phrase().unwrap();
 
     // Send secret phras to sync server
-    connect_to_sync_server("sender".into(), &secret_phrase).await?;
+    connect_to_sync_server(Requester::Sender, &secret_phrase).await?;
 
     // Start listener
     let listener = TcpListener::bind(format!("{}:{}", local_ip, SENDER_PORT))
@@ -105,7 +116,7 @@ async fn exec_sender(path: String) -> Result<(), Box<dyn Error>> {
 }
 
 async fn connect_to_sync_server(
-    requester: String,
+    requester: Requester,
     secret_phrase: &str,
 ) -> Result<(String, String), Box<dyn Error>> {
     let mut ip = String::new();
@@ -113,24 +124,28 @@ async fn connect_to_sync_server(
 
     let mut stream = TcpStream::connect(format!("{}:{}", SYNC_SERVER_IP, SYNC_SERVER_PORT)).await?;
 
-    let data = json!({
-        "requester":  requester,
-        "secret_phrase": secret_phrase,
-    });
+    let data = ReceiverSendData {
+        requester: requester,
+        secret_phrase: secret_phrase.to_string(),
+    };
+    let data_serialized = serde_json::to_string(&data).unwrap();
 
-    stream.write_all(data.to_string().as_bytes()).await.unwrap();
+    stream.write_all(data_serialized.as_bytes()).await.unwrap();
 
-    if requester == "receiver" {
-        let mut reader = BufReader::new(stream);
-        let mut buffer = vec![0; 1024];
+    match requester {
+        Requester::Receiver => {
+            let mut reader = BufReader::new(stream);
+            let mut buffer = vec![0; 1024];
 
-        let num_bytes = reader.read(&mut buffer[..]).await.unwrap();
+            let num_bytes = reader.read(&mut buffer[..]).await.unwrap();
 
-        if num_bytes > 0 {
-            let data: ReceiverData = serde_json::from_slice(&buffer[..num_bytes])?;
-            ip = data.ip;
-            port = data.port.to_string();
+            if num_bytes > 0 {
+                let data: ReceiverGetData = serde_json::from_slice(&buffer[..num_bytes])?;
+                ip = data.ip;
+                port = data.port.to_string();
+            }
         }
+        _ => {}
     }
 
     Ok((ip, port))

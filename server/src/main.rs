@@ -6,9 +6,15 @@ use tokio::{
     net::TcpListener,
 };
 
+#[derive(Debug, Serialize, Deserialize)]
+enum Requester {
+    Sender,
+    Receiver,
+}
+
 #[derive(Serialize, Deserialize)]
 struct ReceiverData {
-    requester: String,
+    requester: Requester,
     secret_phrase: String,
 }
 
@@ -39,30 +45,33 @@ async fn main() -> Result<(), Box<dyn std::error::Error + 'static>> {
         // Store the secret phrase and corresponding IP in memory
         if num_bytes > 0 {
             let data: ReceiverData = serde_json::from_slice(&buffer[..num_bytes])?;
-            let requester = data.requester;
-            let secret_phrase = data.secret_phrase;
+            let requester: Requester = data.requester;
+            let secret_phrase: String = data.secret_phrase;
 
-            if requester == "sender" {
-                phrases.insert(secret_phrase, addr);
+            match requester {
+                Requester::Sender => {
+                    phrases.insert(secret_phrase, addr);
 
-                println!("HashMap content:");
-                for (key, value) in &phrases {
-                    println!("{}: {}", key, value);
+                    println!("HashMap content:");
+                    for (key, value) in &phrases {
+                        println!("{}: {}", key, value);
+                    }
                 }
-            } else {
-                if phrases.contains_key(&secret_phrase) {
-                    // send back IP of sender to receiver
-                    let sender_addr = phrases.get(&secret_phrase).unwrap();
+                Requester::Receiver => {
+                    if phrases.contains_key(&secret_phrase) {
+                        // send back IP of sender to receiver
+                        let sender_addr = phrases.get(&secret_phrase).unwrap();
 
-                    let data = json!({
-                        "ip": sender_addr.ip(),
-                        "port": sender_addr.port(),
-                    });
+                        let data = json!({
+                            "ip": sender_addr.ip(),
+                            "port": sender_addr.port(),
+                        });
 
-                    stream_writer
-                        .write_all(data.to_string().as_bytes())
-                        .await
-                        .unwrap();
+                        stream_writer
+                            .write_all(data.to_string().as_bytes())
+                            .await
+                            .unwrap();
+                    }
                 }
             }
         }
