@@ -7,7 +7,7 @@ use std::fs::File as StdFile;
 use std::io::BufReader as StdBufReader;
 use tokio::{
     fs::{self, File},
-    io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader},
+    io::{AsyncReadExt, AsyncWriteExt, BufReader},
     net::{TcpListener, TcpStream},
 };
 
@@ -162,6 +162,5 @@ fn get_phrase() -> Result<String, Box<dyn Error>> {
             .unwrap()
     );
 
-    Ok("0-lula-sol".to_string())
-    //Ok(phrase)
+    Ok(phrase)
 }
