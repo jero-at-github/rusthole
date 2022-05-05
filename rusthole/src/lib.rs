@@ -1,7 +1,5 @@
-use rand::Rng;
-use serde::{Deserialize, Serialize};
-use std::fs::{metadata, File as StdFile};
-use std::io::BufReader as StdBufReader;
+use common::{ReceiverGetData, ReceiverSendData, Requester, SenderSendData};
+use std::fs::metadata;
 use std::{error::Error, path::Path};
 use tokio::{
     fs::{self, File},
@@ -9,64 +7,23 @@ use tokio::{
     net::{TcpListener, TcpStream},
 };
 
-#[derive(Serialize, Deserialize, Copy, Clone)]
-enum Requester {
-    Sender,
-    Receiver,
-}
+use crate::secret_phrase::{get_phrase, print_secret_phrase};
 
-#[derive(Serialize, Deserialize)]
-struct ReceiverSendData {
-    requester: Requester,
-    secret_phrase: String,
-}
-
-#[derive(Serialize, Deserialize)]
-struct ReceiverGetData {
-    ip: String,
-    port: u16,
-}
+mod secret_phrase;
 
 const SYNC_SERVER_IP: &str = "127.0.0.1";
 const SYNC_SERVER_PORT: &str = "8081";
 const SENDER_PORT: &str = "8080";
-
-pub async fn exec_receiver(secret_phrase: &str) -> Result<(), Box<dyn Error>> {
-    let path = "./downloads/received.mp4";
-
-    File::create(path).await?;
-
-    print!("{esc}c", esc = 27 as char);
-
-    let (ip, port) = connect_to_sync_server(Requester::Receiver, secret_phrase).await?;
-
-    print!("ip: {} port: {}", ip, port);
-    // Receiving file (14 Bytes) into: sample.txt
-    // ok? (y/N):
-    // Receiving (->tcp:172.29.4.15:40403)..
-    // 100%|██████████████████████████████████████████████████████████████████████████████████████████████| 14.0/14.0 [00:00<00:00, 95.5B/s]
-    // Received file written to sample.txt
-
-    // Connecting to listener
-    let stream = TcpStream::connect(format!("{}:{}", ip, SENDER_PORT)).await?;
-
-    // Read streamed content file
-    let mut reader = BufReader::new(stream);
-    let mut reader_content = Vec::new();
-    reader.read_to_end(&mut reader_content).await.unwrap();
-
-    // Write content file
-    fs::write(path, reader_content).await?;
-
-    Ok(())
-}
 
 pub async fn exec_sender(path: String) -> Result<(), Box<dyn Error>> {
     let local_ip = "127.0.0.1";
 
     // Check if the path exists
     let path_file = Path::new(path.as_str());
+    let file_size = metadata(path_file)?.len();
+    let file_name = path_file.file_name().unwrap().to_str().unwrap().to_string();
     let path_exists = path_file.exists();
+
     if !path_exists {
         return Err("Path doesn't exist!")?;
     }
@@ -78,7 +35,7 @@ pub async fn exec_sender(path: String) -> Result<(), Box<dyn Error>> {
     let secret_phrase = get_phrase().unwrap();
 
     // Send secret phras to sync server
-    connect_to_sync_server(Requester::Sender, &secret_phrase).await?;
+    connect_sender_to_server(&secret_phrase, file_name.clone(), file_size).await?;
 
     // Start listener
     let listener = TcpListener::bind(format!("{}:{}", local_ip, SENDER_PORT))
@@ -86,11 +43,7 @@ pub async fn exec_sender(path: String) -> Result<(), Box<dyn Error>> {
         .unwrap();
 
     // Print file size, file name and secret phrase
-    println!(
-        "Sending {:?} Bytes file named {:?}",
-        metadata(path_file)?.len(),
-        path_file.file_name().unwrap()
-    );
+    println!("Sending {:?} Bytes file named {:?}", file_size, file_name);
     print_secret_phrase(&secret_phrase);
 
     // Wait for connection
@@ -103,67 +56,87 @@ pub async fn exec_sender(path: String) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-async fn connect_to_sync_server(
-    requester: Requester,
+async fn connect_sender_to_server(
     secret_phrase: &str,
-) -> Result<(String, String), Box<dyn Error>> {
-    let mut ip = String::new();
-    let mut port = String::new();
-
+    file_name: String,
+    file_size: u64,
+) -> Result<(), Box<dyn Error>> {
     let mut stream = TcpStream::connect(format!("{}:{}", SYNC_SERVER_IP, SYNC_SERVER_PORT)).await?;
 
+    let data = SenderSendData {
+        requester: Requester::Sender,
+        secret_phrase: secret_phrase.to_string(),
+        file_name,
+        file_size,
+    };
+
+    let data_serialized = serde_json::to_string(&data).unwrap();
+    stream.write_all(data_serialized.as_bytes()).await.unwrap();
+
+    Ok(())
+}
+
+pub async fn exec_receiver(secret_phrase: &str) -> Result<(), Box<dyn Error>> {
+    let path = "./downloads/received.mp4";
+
+    File::create(path).await?;
+
+    print!("{esc}c", esc = 27 as char);
+
+    let data: ReceiverGetData = connect_recv_to_server(secret_phrase).await?;
+
+    // print!("ip: {} port: {}", data.ip, data.port);
+    println!(
+        "Receiving file ({} Bytes) into: {}",
+        data.file_size, data.file_name
+    );
+    // ok? (y/N):
+    // Receiving (->tcp:172.29.4.15:40403)..
+    // 100%|██████████████████████████████████████████████████████████████████████████████████████████████| 14.0/14.0 [00:00<00:00, 95.5B/s]
+    // Received file written to sample.txt
+
+    // Connecting to listener
+    let stream = TcpStream::connect(format!("{}:{}", data.ip, SENDER_PORT)).await?;
+
+    // Read streamed content file
+    let mut reader = BufReader::new(stream);
+    let mut reader_content = Vec::new();
+    reader.read_to_end(&mut reader_content).await.unwrap();
+
+    // Write content file
+    fs::write(path, reader_content).await?;
+
+    Ok(())
+}
+
+async fn connect_recv_to_server(secret_phrase: &str) -> Result<ReceiverGetData, Box<dyn Error>> {
+    // Connect to sync server
+    let mut stream = TcpStream::connect(format!("{}:{}", SYNC_SERVER_IP, SYNC_SERVER_PORT)).await?;
+
+    // Send data
     let data = ReceiverSendData {
-        requester: requester,
+        requester: Requester::Receiver,
         secret_phrase: secret_phrase.to_string(),
     };
     let data_serialized = serde_json::to_string(&data).unwrap();
-
     stream.write_all(data_serialized.as_bytes()).await.unwrap();
 
-    match requester {
-        Requester::Receiver => {
-            let mut reader = BufReader::new(stream);
-            let mut buffer = vec![0; 1024];
+    // Read data
+    let mut reader = BufReader::new(stream);
+    let mut buffer = vec![0; 1024];
 
-            let num_bytes = reader.read(&mut buffer[..]).await.unwrap();
+    let num_bytes = reader.read(&mut buffer[..]).await.unwrap();
 
-            if num_bytes > 0 {
-                let data: ReceiverGetData = serde_json::from_slice(&buffer[..num_bytes])?;
-                ip = data.ip;
-                port = data.port.to_string();
-            }
-        }
-        _ => {}
+    if num_bytes > 0 {
+        let data: ReceiverGetData = serde_json::from_slice(&buffer[..num_bytes])?;
+
+        return Ok(ReceiverGetData {
+            ip: data.ip,
+            port: data.port,
+            file_name: data.file_name,
+            file_size: data.file_size,
+        });
+    } else {
+        return Err("Error in receiver: no response from sync-server.")?;
     }
-
-    Ok((ip, port))
-}
-
-fn print_secret_phrase(secret_phrase: &str) {
-    println!("Rusthole code is: {}", secret_phrase);
-    println!("On the other computer, please run:");
-    println!();
-    println!("rusthole receive {}", secret_phrase);
-}
-
-fn get_phrase() -> Result<String, Box<dyn Error>> {
-    let mut rng = rand::thread_rng();
-
-    let json_file = StdFile::open("./bip39-es.json")?;
-    let json_reader = StdBufReader::new(json_file);
-    let bip39_list: serde_json::Value =
-        serde_json::from_reader(json_reader).expect("JSON was not well-formatted");
-
-    let phrase = format!(
-        "{}-{}-{}",
-        rng.gen_range(0..=9u8),
-        bip39_list["list"][rng.gen_range(0..=2047)]
-            .as_str()
-            .unwrap(),
-        bip39_list["list"][rng.gen_range(0..=2047)]
-            .as_str()
-            .unwrap()
-    );
-
-    Ok(phrase)
 }
