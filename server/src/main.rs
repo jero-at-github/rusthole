@@ -22,7 +22,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + 'static>> {
     println!("Sync server accepting connection at {}:{}", ip, port);
 
     loop {
-        let (mut stream, addr) = listener.accept().await.unwrap();
+        let (mut stream, _addr) = listener.accept().await.unwrap();
         let (stream_reader, mut stream_writer) = stream.split();
 
         let mut reader = BufReader::new(stream_reader);

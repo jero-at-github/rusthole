@@ -26,7 +26,7 @@ pub async fn exec_sender(path: String) -> Result<(), Box<dyn Error>> {
     let path_exists = path_file.exists();
 
     if !path_exists {
-        return Err("Path doesn't exist!")?;
+        Err("Path doesn't exist!")?
     }
 
     // Clean terminal
@@ -141,13 +141,13 @@ async fn connect_recv_to_server(secret_phrase: &str) -> Result<ReceiverGetData, 
     if num_bytes > 0 {
         let data: ReceiverGetData = serde_json::from_slice(&buffer[..num_bytes])?;
 
-        return Ok(ReceiverGetData {
+        Ok(ReceiverGetData {
             ip: data.ip,
             port: data.port,
             file_name: data.file_name,
             file_size: data.file_size,
-        });
+        })
     } else {
-        return Err("Error in receiver: no response from sync-server.")?;
+        Err("Error in receiver: no response from sync-server.")?
     }
 }
