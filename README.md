@@ -16,6 +16,7 @@ Following crates have been used in the project:
 - clap
 - serde_json
 - rand
+- question
 
 # Usage
 1) Compile the binaries as usual: `cargo build`
