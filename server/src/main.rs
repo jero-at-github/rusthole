@@ -42,8 +42,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + 'static>> {
                     phrases.insert(
                         data.secret_phrase,
                         HashMapData {
-                            ip: addr.ip().to_string(),
-                            port: addr.port(),
+                            ip: data.ip,
+                            port: data.port,
                             file_name: data.file_name,
                             file_size: data.file_size,
                         },

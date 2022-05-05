@@ -1,4 +1,5 @@
 use common::{ReceiverGetData, ReceiverSendData, Requester, SenderSendData};
+use question::{Answer, Question};
 use std::fs::metadata;
 use std::{error::Error, path::Path};
 use tokio::{
@@ -64,6 +65,8 @@ async fn connect_sender_to_server(
     let mut stream = TcpStream::connect(format!("{}:{}", SYNC_SERVER_IP, SYNC_SERVER_PORT)).await?;
 
     let data = SenderSendData {
+        ip: stream.peer_addr().unwrap().ip().to_string(),
+        port: stream.peer_addr().unwrap().port(),
         requester: Requester::Sender,
         secret_phrase: secret_phrase.to_string(),
         file_name,
@@ -77,26 +80,32 @@ async fn connect_sender_to_server(
 }
 
 pub async fn exec_receiver(secret_phrase: &str) -> Result<(), Box<dyn Error>> {
-    let path = "./downloads/received.mp4";
-
-    File::create(path).await?;
-
     print!("{esc}c", esc = 27 as char);
-
     let data: ReceiverGetData = connect_recv_to_server(secret_phrase).await?;
 
-    // print!("ip: {} port: {}", data.ip, data.port);
+    let path = format!("./{}", data.file_name);
+    //TODO: check if file already exists, in affirmative case abort
+    File::create(&path).await?;
+
     println!(
         "Receiving file ({} Bytes) into: {}",
         data.file_size, data.file_name
     );
-    // ok? (y/N):
-    // Receiving (->tcp:172.29.4.15:40403)..
-    // 100%|██████████████████████████████████████████████████████████████████████████████████████████████| 14.0/14.0 [00:00<00:00, 95.5B/s]
-    // Received file written to sample.txt
+
+    let answer = Question::new("Ok?")
+        .default(Answer::YES)
+        .show_defaults()
+        .confirm();
+
+    if answer == Answer::YES {
+    } else {
+        //TODO: println!("Aborting...");
+    }
+    //TODO: 100%|██████████████████████████████████████████████████████████████████████████████████████████████| 14.0/14.0 [00:00<00:00, 95.5B/s]
 
     // Connecting to listener
     let stream = TcpStream::connect(format!("{}:{}", data.ip, SENDER_PORT)).await?;
+    println!("Receiving (->tcp:{:?})", stream.local_addr());
 
     // Read streamed content file
     let mut reader = BufReader::new(stream);
@@ -105,6 +114,8 @@ pub async fn exec_receiver(secret_phrase: &str) -> Result<(), Box<dyn Error>> {
 
     // Write content file
     fs::write(path, reader_content).await?;
+
+    println!("Received file written to {}", data.file_name);
 
     Ok(())
 }
