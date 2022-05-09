@@ -18,6 +18,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + 'static>> {
 
     // Clean terminal
     print!("{esc}c", esc = 27 as char);
+
     // Wait for connection
     println!("Sync server accepting connection at {}:{}", ip, port);
 
@@ -34,7 +35,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + 'static>> {
         // Store the secret phrase and corresponding IP in memory
         if num_bytes > 0 {
             let data: Value = serde_json::from_slice(&buffer[..num_bytes])?;
-            let requester = Requester::from(data["requester"].to_string());
+            let requester: String = data["requester"].as_str().unwrap().into();
+            let requester = Requester::from(requester);
 
             match requester {
                 Requester::Sender => {

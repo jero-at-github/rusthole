@@ -11,13 +11,17 @@ impl From<String> for Requester {
     fn from(value: String) -> Self {
         match value.to_lowercase().as_str() {
             "sender" => Requester::Sender,
-            "\"sender\"" => Requester::Sender,
             "receiver" => Requester::Receiver,
-            "\"receiver\"" => Requester::Receiver,
             _ => Requester::None,
         }
     }
 }
+
+// #[derive(Serialize, Deserialize, Debug)]
+// pub struct TcpData {
+//     action:
+// }
+
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ReceiverSendData {
     pub requester: Requester,
